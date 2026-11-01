@@ -29,7 +29,9 @@ jobs:
           cache: gradle
 
       - name: Build, unit and integration tests, JaCoCo coverage
-        run: ./gradlew build --no-daemon -PappVersion="$APP_VERSION"
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon -PappVersion="$APP_VERSION"
 
       # Keep the jar as a GitHub artifact.
       - name: Upload application jar to GitHub artifacts
