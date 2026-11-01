@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Secure Auth Platform</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="card">
+    <h1>Secure Auth Platform</h1>
+
+    <div id="message" class="message" role="alert" hidden></div>
+
+    <section id="view-login" hidden>
+      <h2>Sign in</h2>
+      <form id="form-login" autocomplete="on">
+        <label>Username
+          <input name="username" type="text" autocomplete="username" required maxlength="50">
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" required maxlength="72">
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p class="switch">No account? <a href="#register" data-view="register">Register</a></p>
+    </section>
+
+    <section id="view-register" hidden>
+      <h2>Create account</h2>
+      <form id="form-register" autocomplete="on">
+        <label>Username
+          <input name="username" type="text" autocomplete="username" required minlength="3" maxlength="50"
+                 pattern="[A-Za-z0-9._\-]+" title="Letters, digits, '.', '_' and '-'">
+        </label>
+        <label>Password <small>(12-72 characters)</small>
+          <input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="72">
+        </label>
+        <button type="submit">Register</button>
+      </form>
+      <p class="switch">Already registered? <a href="#login" data-view="login">Sign in</a></p>
+    </section>
+
+    <section id="view-profile" hidden>
+      <h2>Your profile</h2>
+      <dl>
+        <dt>Username</dt><dd id="profile-username"></dd>
+        <dt>Role</dt><dd id="profile-role"></dd>
+        <dt>Member since</dt><dd id="profile-created"></dd>
+      </dl>
+      <button id="btn-logout" type="button">Sign out</button>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

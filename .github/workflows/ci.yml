@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  APP_VERSION: 1.0.${{ github.run_number }}
+
+jobs:
+  # 1. Build and test once. The resulting jar is THE artifact that gets scanned, stored and containerized.
+  build:
+    name: Build, test and publish artifact
+    runs-on: [self-hosted, linux]
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # SonarQube needs full history for new-code analysis
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Build, unit and integration tests, JaCoCo coverage
+        run: ./gradlew build --no-daemon -PappVersion="$APP_VERSION"
+
+      # Keep the jar as a GitHub artifact.
+      - name: Upload application jar to GitHub artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-service-jar
+          path: auth-service/build/libs/app.jar
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            auth-service/build/reports/tests
+            auth-service/build/reports/jacoco
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # 2. Static analysis and source/dependency scanning, in parallel with the image job.
+  scan:
+    name: SonarQube and Trivy filesystem scan
+    needs: build
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: SonarQube analysis and quality gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "SONAR_TOKEN not configured; skipping SonarQube analysis."
+            exit 0
+          fi
+          ./gradlew build sonar --no-daemon -PappVersion="$APP_VERSION" -Dsonar.qualitygate.wait=true
+
+      - name: Trivy filesystem scan (dependencies, secrets, IaC)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          skip-dirs: build,.gradle,dist
+          format: table
+          exit-code: "1"
+
+  # 3. Build the image (the Dockerfile compiles the app) and scan it.
+  image:
+    name: Build and scan container image
+    needs: build
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Dockerfile compiles the app itself (multi-stage), so no jar needs to be downloaded first.
+      - name: Build image
+        run: docker build --build-arg APP_VERSION="${APP_VERSION}" -t "secure-auth/auth-service:${{ github.sha }}" .
+
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-auth/auth-service:${{ github.sha }}
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+
+      # Push only after the image passed the scan, and only for pushes to main (never for PRs).
+      # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a Docker Hub access token).
+      - name: Log in to Docker Hub
+        if: ${{ github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push image to Docker Hub
+        if: ${{ github.event_name == 'push' }}
+        env:
+          REPO: ${{ secrets.DOCKERHUB_USERNAME }}/auth-service
+        run: |
+          set -euo pipefail
+          src="secure-auth/auth-service:${{ github.sha }}"
+          for tag in "${APP_VERSION}" "${{ github.sha }}" latest; do
+            docker tag "$src" "${REPO}:${tag}"
+            docker push "${REPO}:${tag}"
+          done
+
+      # The runner is persistent, so free disk space after every run.
+      - name: Clean up Docker images
+        if: always()
+        run: docker image prune -af || true

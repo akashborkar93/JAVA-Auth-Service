@@ -1,0 +1,37 @@
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-exception: false
+  servlet:
+    session:
+      timeout: 15m
+      cookie:
+        http-only: true
+        same-site: strict
+        # Set to true when serving over HTTPS (production).
+        secure: ${SESSION_COOKIE_SECURE:false}
+
+spring:
+  application:
+    name: auth-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: jdbc:h2:mem:authdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
