@@ -54,7 +54,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # 2. Static analysis and source/dependency scanning, in parallel with the image job.
+  # 2. Static analysis and source/dependency scanning. Runs after build; the image job waits for it.
   scan:
     name: SonarQube and Trivy filesystem scan
     needs: build
@@ -103,7 +103,7 @@ jobs:
   # 3. Build the image (the Dockerfile compiles the app) and scan it.
   image:
     name: Build and scan container image
-    needs: build
+    needs: scan # runs only if build and scan both succeeded
     runs-on: [self-hosted, linux]
     steps:
       - uses: actions/checkout@v4
@@ -130,14 +130,14 @@ jobs:
       # Push only after the image passed the scan, and only for pushes to main (never for PRs).
       # Requires repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (a Docker Hub access token).
       - name: Log in to Docker Hub
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Tag and push image to Docker Hub
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
         env:
           REPO: ${{ secrets.DOCKERHUB_USERNAME }}/auth-service
         run: |
