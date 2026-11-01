@@ -85,6 +85,10 @@ jobs:
 
       - name: Trivy filesystem scan (dependencies, secrets, IaC)
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          # /tmp is a small tmpfs on the runner; use disk-backed dirs (cache persists between runs).
+          TMPDIR: ${{ runner.temp }}
+          TRIVY_CACHE_DIR: ${{ runner.tool_cache }}/trivy-cache
         with:
           scan-type: fs
           scan-ref: .
@@ -109,6 +113,10 @@ jobs:
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          # /tmp is a small tmpfs on the runner; use disk-backed dirs (cache persists between runs).
+          TMPDIR: ${{ runner.temp }}
+          TRIVY_CACHE_DIR: ${{ runner.tool_cache }}/trivy-cache
         with:
           scan-type: image
           image-ref: secure-auth/auth-service:${{ github.sha }}
